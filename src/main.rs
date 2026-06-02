@@ -4,6 +4,7 @@ mod cli;
 mod config;
 mod core;
 mod service;
+mod streaming;
 mod timer;
 
 use clap::{Parser, Subcommand};

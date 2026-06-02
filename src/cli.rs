@@ -34,11 +34,16 @@ pub async fn cmd_check(config: &Config) -> anyhow::Result<()> {
                 "   地区: {} | ISP: {}\n   类型: {} | CF 风险: {}",
                 q.country, q.isp, q.ip_type(), q.cf_risk()
             );
-        } else {
-            println!("   质量检测失败");
         }
         println!();
     }
+
+    println!("📺 流媒体检测中...");
+    let results = crate::streaming::check_all().await;
+    for r in &results {
+        println!("   {:16} {}", r.service, r.status.display());
+    }
+    println!();
     Ok(())
 }
 

@@ -176,7 +176,7 @@ async fn tg_check(bot: &Bot, chat_id: ChatId, config: &Config) {
         return;
     }
 
-    let _ = bot.send_message(chat_id, "🔍 检测 IP 质量中...").await;
+    let _ = bot.send_message(chat_id, "🔍 检测中，请稍候...").await;
 
     let mut lines = Vec::new();
     for r in &changeable {
@@ -184,16 +184,25 @@ async fn tg_check(bot: &Bot, chat_id: ChatId, config: &Config) {
             Some(ip) => ip.to_string(),
             None => continue,
         };
-        let quality = check_ip_quality(&ip).await;
-        let line = match quality {
-            Some(q) => format!(
+        if let Some(q) = check_ip_quality(&ip).await {
+            lines.push(format!(
                 "📍 <b>{}</b>\nIP: <code>{}</code>\n地区: {} | ISP: {}\n类型: {} | CF 风险: {}",
                 r.label, ip, q.country, q.isp, q.ip_type(), q.cf_risk()
-            ),
-            None => format!("📍 <b>{}</b>\nIP: <code>{}</code>\n质量检测失败", r.label, ip),
-        };
-        lines.push(line);
+            ));
+        }
     }
+
+    // 流媒体检测
+    let streaming = crate::streaming::check_all().await;
+    let streaming_lines: Vec<String> = streaming
+        .iter()
+        .map(|r| format!("  {:16} {}", r.service, r.status.display()))
+        .collect();
+
+    lines.push(format!(
+        "\n📺 <b>流媒体解锁</b>\n<pre>{}</pre>",
+        streaming_lines.join("\n")
+    ));
 
     let _ = bot
         .send_message(chat_id, lines.join("\n\n"))
