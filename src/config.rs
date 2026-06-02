@@ -142,6 +142,13 @@ pub async fn run_setup_wizard() -> anyhow::Result<()> {
 
     std::fs::write("config.env", content)?;
     println!("✅ 配置已保存到 config.env\n");
+    println!("常用命令:");
+    println!("  redial              启动 Telegram 机器人");
+    println!("  redial status       查看当前 IP");
+    println!("  redial check        检查 IP 质量和流媒体解锁");
+    println!("  redial change       换 IP");
+    println!("  redial service install   安装系统服务（开机自启）");
+    println!();
     Ok(())
 }
 
