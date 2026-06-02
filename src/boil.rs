@@ -77,25 +77,12 @@ impl BoilClient {
         Ok(Self { client, jar })
     }
 
-    /// 确保登录态有效：先测试缓存 session，失效则重新登录并保存
+    /// 有缓存 cookie 直接复用，否则重新登录
     pub async fn login(&self, account: &str, password: &str) -> anyhow::Result<()> {
-        if self.test_session().await {
+        if cookie_path().exists() {
             return Ok(());
         }
         self.do_login(account, password).await
-    }
-
-    async fn test_session(&self) -> bool {
-        // 直接尝试解析为 QueryAllResponse，成功才算 session 有效
-        match self.client
-            .post(format!("{BOIL_URL}/api/query_all"))
-            .json(&serde_json::json!({}))
-            .send()
-            .await
-        {
-            Ok(resp) => resp.json::<QueryAllResponse>().await.is_ok(),
-            Err(_) => false,
-        }
     }
 
     async fn do_login(&self, account: &str, password: &str) -> anyhow::Result<()> {
@@ -142,15 +129,24 @@ impl BoilClient {
     }
 
     pub async fn query_all(&self) -> anyhow::Result<QueryAllResponse> {
-        self.client
+        let body = self.client
             .post(format!("{BOIL_URL}/api/query_all"))
             .json(&serde_json::json!({}))
             .send()
             .await
             .context("query_all 请求失败")?
-            .json::<QueryAllResponse>()
+            .text()
             .await
-            .context("query_all 响应解析失败")
+            .context("query_all 读取响应失败")?;
+
+        serde_json::from_str::<QueryAllResponse>(&body)
+            .with_context(|| format!("query_all 响应解析失败: {}", &body[..body.len().min(200)]))
+    }
+
+    /// session 失效后强制重新登录（删除缓存 cookie 后重试）
+    pub async fn relogin(&self, account: &str, password: &str) -> anyhow::Result<()> {
+        let _ = std::fs::remove_file(cookie_path());
+        self.do_login(account, password).await
     }
 
     pub async fn reconnect(&self, router_id: &str, interface: &str) -> anyhow::Result<()> {
