@@ -126,7 +126,6 @@ async fn handle_callback(
 async fn tg_status(bot: &Bot, chat_id: ChatId, config: &Config) {
     let result = async {
         let c = BoilClient::new()?;
-        c.login(&config.boil_account, &config.boil_password).await?;
         c.query_all_authed(&config.boil_account, &config.boil_password).await
     }
     .await;
@@ -156,7 +155,6 @@ async fn tg_status(bot: &Bot, chat_id: ChatId, config: &Config) {
 async fn tg_check(bot: &Bot, chat_id: ChatId, config: &Config) {
     let result = async {
         let c = BoilClient::new()?;
-        c.login(&config.boil_account, &config.boil_password).await?;
         c.query_all_authed(&config.boil_account, &config.boil_password).await
     }
     .await;
@@ -275,7 +273,6 @@ async fn tg_timer(bot: &Bot, chat_id: ChatId, timer: &Arc<Mutex<TimerManager>>, 
 async fn tg_change(bot: &Bot, chat_id: ChatId, config: &Config) {
     let result = async {
         let c = BoilClient::new()?;
-        c.login(&config.boil_account, &config.boil_password).await?;
         c.query_all_authed(&config.boil_account, &config.boil_password).await
     }
     .await;

@@ -33,7 +33,6 @@ pub async fn do_reconnect(
     interface: &str,
 ) -> anyhow::Result<ReconnectResult> {
     let c = BoilClient::new()?;
-    c.login(&config.boil_account, &config.boil_password).await?;
     let data = c.query_all_authed(&config.boil_account, &config.boil_password).await?;
     let old_ip = data.get_ip(router_id, interface).map(str::to_string);
 
