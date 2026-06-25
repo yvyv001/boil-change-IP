@@ -55,6 +55,13 @@ fn cookie_path() -> PathBuf {
 
 const BOIL_URL: &str = "https://ippanel.boil.network";
 
+/// 判断错误是否为服务器限流（查询过于频密）。
+/// 服务器以 HTTP 200 + `{"error": "查詢過於頻密..."}` 形式返回，文案为繁体。
+pub fn is_rate_limited(err: &anyhow::Error) -> bool {
+    let m = err.to_string();
+    m.contains("頻密") || m.contains("频密") || m.contains("too frequent")
+}
+
 impl BoilClient {
     pub fn new() -> anyhow::Result<Self> {
         let jar = Arc::new(Jar::default());
@@ -140,15 +147,28 @@ impl BoilClient {
             .await
             .context("query_all 读取响应失败")?;
 
+        // 先检查业务层错误（如限流），避免被误判为解析失败
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
+            if let Some(err_msg) = v.get("error").and_then(|e| e.as_str()) {
+                anyhow::bail!("{}", err_msg);
+            }
+        }
+
         serde_json::from_str::<QueryAllResponse>(&body)
             .with_context(|| format!("query_all 响应解析失败: {}", &body[..body.len().min(200)]))
     }
 
-    /// 自动重登录版 query_all：session 失效时删除旧 cookie 重新登录后重试一次
+    /// 自动重登录版 query_all：session 失效时删除旧 cookie 重新登录后重试一次；
+    /// 遇到限流错误则等待 6 秒后重试，不删 cookie。
     pub async fn query_all_authed(&self, account: &str, password: &str) -> anyhow::Result<QueryAllResponse> {
         match self.query_all().await {
             Ok(d) => Ok(d),
-            Err(_) => {
+            Err(e) => {
+                if is_rate_limited(&e) {
+                    log::warn!("query_all 限流，6 秒后重试: {e}");
+                    tokio::time::sleep(Duration::from_secs(6)).await;
+                    return self.query_all().await;
+                }
                 // session 过期或无效，强制重新登录
                 let _ = std::fs::remove_file(cookie_path());
                 self.do_login(account, password).await?;

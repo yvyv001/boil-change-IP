@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use tokio::time::sleep;
 
-use crate::{boil::BoilClient, config::Config};
+use crate::{boil::{BoilClient, QueryAllResponse}, config::Config};
 
 pub struct IpQuality {
     pub country: String,
@@ -31,9 +31,13 @@ pub async fn do_reconnect(
     config: &Config,
     router_id: &str,
     interface: &str,
+    pre_data: Option<QueryAllResponse>,
 ) -> anyhow::Result<ReconnectResult> {
     let c = BoilClient::new()?;
-    let data = c.query_all_authed(&config.boil_account, &config.boil_password).await?;
+    let data = match pre_data {
+        Some(d) => d,
+        None => c.query_all_authed(&config.boil_account, &config.boil_password).await?,
+    };
     let old_ip = data.get_ip(router_id, interface).map(str::to_string);
 
     anyhow::ensure!(
@@ -48,13 +52,24 @@ pub async fn do_reconnect(
 
     let mut new_ip: Option<String> = None;
     for _ in 0..10u8 {
-        let d2 = c.query_all().await?;
+        // 服务器限流阈值约 5 秒，轮询间隔用 6 秒保持安全余量
+        sleep(Duration::from_secs(6)).await;
+        let d2 = match c.query_all().await {
+            Ok(d) => d,
+            Err(e) => {
+                // 遇到限流直接跳过本轮，外层 sleep 会提供缓冲
+                if crate::boil::is_rate_limited(&e) {
+                    log::warn!("轮询 query_all 限流，跳过本轮: {e}");
+                    continue;
+                }
+                return Err(e);
+            }
+        };
         let ip = d2.get_ip(router_id, interface).map(str::to_string);
         if ip.is_some() && ip != old_ip {
             new_ip = ip;
             break;
         }
-        sleep(Duration::from_secs(3)).await;
     }
 
     let (reachable, quality) = match &new_ip {

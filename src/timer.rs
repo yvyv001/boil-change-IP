@@ -71,22 +71,22 @@ pub async fn start(config: Arc<Config>) -> anyhow::Result<TimerManager> {
 }
 
 async fn run_auto_change(config: &Config) {
-    // 找第一台可换 IP 的服务器
-    let target = match get_first_changeable(config).await {
-        Ok(Some(t)) => t,
-        Ok(None) => {
-            log::warn!("定时换 IP：没有可换 IP 的服务器");
-            return;
-        }
-        Err(e) => {
-            log::error!("定时换 IP 查询失败: {e}");
-            return;
-        }
+    let c = match BoilClient::new() {
+        Ok(c) => c,
+        Err(e) => { log::error!("定时换 IP 失败: {e}"); return; }
+    };
+    let data = match c.query_all_authed(&config.boil_account, &config.boil_password).await {
+        Ok(d) => d,
+        Err(e) => { log::error!("定时换 IP 查询失败: {e}"); return; }
+    };
+    let target = match data.changeable().first().map(|r| (r.router_id.clone(), r.interface.clone())) {
+        Some(t) => t,
+        None => { log::warn!("定时换 IP：没有可换 IP 的服务器"); return; }
     };
 
     log::info!("定时换 IP 触发: {}/{}", target.0, target.1);
 
-    match do_reconnect(config, &target.0, &target.1).await {
+    match do_reconnect(config, &target.0, &target.1, Some(data)).await {
         Ok(res) => {
             let msg = match &res.new_ip {
                 Some(new_ip) => {
@@ -111,12 +111,6 @@ async fn run_auto_change(config: &Config) {
             tg_notify(config, &format!("❌ 定时换 IP 失败: {e}")).await;
         }
     }
-}
-
-async fn get_first_changeable(config: &Config) -> anyhow::Result<Option<(String, String)>> {
-    let c = BoilClient::new()?;
-    let data = c.query_all_authed(&config.boil_account, &config.boil_password).await?;
-    Ok(data.changeable().first().map(|r| (r.router_id.clone(), r.interface.clone())))
 }
 
 async fn tg_notify(config: &Config, msg: &str) {

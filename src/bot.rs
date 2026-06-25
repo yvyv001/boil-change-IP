@@ -116,7 +116,7 @@ async fn handle_callback(
         if let Some(rest) = data.strip_prefix("change:") {
             let mut parts = rest.splitn(2, ':');
             if let (Some(router_id), Some(interface)) = (parts.next(), parts.next()) {
-                tg_do_reconnect(&bot, chat_id, &config, router_id, interface).await;
+                tg_do_reconnect(&bot, chat_id, &config, router_id, interface, None).await;
             }
         }
     }
@@ -293,7 +293,9 @@ async fn tg_change(bot: &Bot, chat_id: ChatId, config: &Config) {
 
     if changeable.len() == 1 {
         let r = changeable[0];
-        tg_do_reconnect(bot, chat_id, config, &r.router_id, &r.interface).await;
+        let (router_id, interface) = (r.router_id.clone(), r.interface.clone());
+        drop(changeable);
+        tg_do_reconnect(bot, chat_id, config, &router_id, &interface, Some(data)).await;
         return;
     }
 
@@ -319,10 +321,11 @@ async fn tg_do_reconnect(
     config: &Config,
     router_id: &str,
     interface: &str,
+    pre_data: Option<crate::boil::QueryAllResponse>,
 ) {
     let _ = bot.send_message(chat_id, "⏳ 开始换 IP，请稍候...").await;
 
-    match do_reconnect(config, router_id, interface).await {
+    match do_reconnect(config, router_id, interface, pre_data).await {
         Ok(res) => match res.new_ip {
             Some(new_ip) => {
                 let reach = if res.reachable { "TCP 可达 ✅" } else { "TCP 未通 ⚠️" };

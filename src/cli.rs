@@ -105,8 +105,11 @@ pub async fn cmd_change(config: &Config) -> anyhow::Result<()> {
         changeable[idx]
     };
 
+    let router_id = target.router_id.clone();
+    let interface = target.interface.clone();
+    drop(changeable);
     println!("⏳ 换 IP 中...");
-    let res = do_reconnect(config, &target.router_id, &target.interface).await?;
+    let res = do_reconnect(config, &router_id, &interface, Some(data)).await?;
 
     match res.new_ip {
         Some(new_ip) => {
